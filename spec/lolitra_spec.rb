@@ -66,7 +66,12 @@ class TestAmqpMessageHandler
   message_handler TestMessage1
 
   stateful false
+
+  def test_message(message)
+    EM.stop { exit } 
+  end
 end
+
 
 describe Lolitra::MessageHandler,'#create_handler' do
   it "returns old instance of the handler for the same message id" do
@@ -171,6 +176,26 @@ describe Lolitra::AmqpMessageHandler, '#message_class_by_key' do
   end
 end
 
+describe Lolitra::AmqpBus do
+  it "should recive message when publish a message" do
+    Lolitra::MessageHandlerManager.bus = Lolitra::AmqpBus.new(:host => "127.0.0.1", :exchange => "test_exchange")
+    Lolitra::MessageHandlerManager.register(TestAmqpMessageHandler)
 
-#TODO
-#add test to Lolitra::AmqpMessageHandler and AmqpBus with evented-spec
+    TestAmqpMessageHandler.should_receive(:handle) do |message|
+      message.should be_an_instance_of TestMessage
+      EM.stop { exit }
+    end
+
+    Lolitra::MessageHandlerManager.publish(TestMessage.new)
+
+    EM.next_tick{ EM.add_timer(60) { EM.stop { exit } }}
+    AMQP::Utilities::EventLoopHelper.eventmachine_thread.join
+  end
+end
+
+describe Lolitra::AmqpBus do
+  it "should return a unable to connect when specify a wrong amqp host" do
+    expect { Lolitra::AmqpBus.new(:host => "192.168.123.123") }.to raise_error(UnableToConnect) #TODO
+    pending 
+  end
+end
