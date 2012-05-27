@@ -195,7 +195,6 @@ end
 
 describe Lolitra::AmqpBus do
   it "should return a unable to connect when specify a wrong amqp host" do
-    expect { Lolitra::AmqpBus.new(:host => "192.168.123.123") }.to raise_error(UnableToConnect) #TODO
-    pending 
+    expect { Lolitra::AmqpBus.new(:host => "192.168.123.123") }.to raise_error(Exception) #TODO
   end
 end
