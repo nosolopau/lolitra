@@ -24,7 +24,6 @@ class TestMessageHandler
   include Lolitra::MessageHandler
 
   started_by TestMessage
-  message_handler TestMessage
   stateful true
 
   def self.find_by_id(id)
@@ -41,7 +40,6 @@ class TestMessageHandler1
 
   started_by TestMessage1
   message_handler TestMessage
-  message_handler TestMessage1
 
   stateful true
 

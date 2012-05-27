@@ -65,8 +65,9 @@ module Lolitra
         handlers.merge!(message_class.message_key => [message_class, get_method_by_class(message_class), id])
       end
      
-      def started_by(message_class)
+      def started_by(message_class, id = :id)
         starters << message_class.message_key
+        message_handler(message_class, id)
       end
 
       def search(message)
