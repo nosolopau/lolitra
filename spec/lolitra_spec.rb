@@ -1,7 +1,7 @@
 require 'spec_helper.rb'
 
 class TestMessage
-  include Lolitra::AmqpMessage
+  include Lolitra::Message
 
   message_key "test1"
 
@@ -11,7 +11,7 @@ class TestMessage
 end
 
 class TestMessage1
-  include Lolitra::AmqpMessage
+  include Lolitra::Message
 
   message_key "test2"
 
@@ -59,8 +59,8 @@ class TestMessageHandler1
 
 end
 
-class TestAmqpMessageHandler
-  include Lolitra::AmqpMessageHandler
+class TestMessageHandlerAmqp
+  include Lolitra::MessageHandler
 
   message_handler TestMessage
   message_handler TestMessage1
@@ -161,7 +161,7 @@ describe Lolitra::MessageHandlerManager, '#handle_message' do
   end
 end
 
-describe Lolitra::AmqpMessage, '#message_key' do
+describe Lolitra::Message, '#message_key' do
   it "message_key has constant key for a class" do
     TestMessage.message_key.should eq "test1"
     TestMessage1.message_key.should eq "test2"
@@ -169,19 +169,19 @@ describe Lolitra::AmqpMessage, '#message_key' do
   end
 end
 
-describe Lolitra::AmqpMessageHandler, '#message_class_by_key' do
+describe Lolitra::MessageHandler, '#message_class_by_key' do
   it "should return the message_class that belongs to key" do
-    TestAmqpMessageHandler.message_class_by_key[TestMessage.message_key].name.should eq "TestMessage" 
-    TestAmqpMessageHandler.message_class_by_key[TestMessage1.message_key].name.should eq "TestMessage1" 
+    TestMessageHandler1.handlers[TestMessage.message_key][0].name.should eq "TestMessage" 
+    TestMessageHandler1.handlers[TestMessage1.message_key][0].name.should eq "TestMessage1" 
   end
 end
 
 describe Lolitra::AmqpBus do
   it "should recive message when publish a message" do
     Lolitra::MessageHandlerManager.bus = Lolitra::AmqpBus.new(:host => "127.0.0.1", :exchange => "test_exchange")
-    Lolitra::MessageHandlerManager.register(TestAmqpMessageHandler)
+    Lolitra::MessageHandlerManager.register(TestMessageHandlerAmqp)
 
-    TestAmqpMessageHandler.should_receive(:handle) do |message|
+    TestMessageHandlerAmqp.should_receive(:handle) do |message|
       message.should be_an_instance_of TestMessage
       EM.stop { exit }
     end

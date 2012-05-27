@@ -62,20 +62,20 @@ module Lolitra
     private
       def message_handler(message_class, id = :id)   
         message_class.new.send(id) #check if id exists for this class
-        handlers.merge!(message_class.name => [message_class, get_method_by_class(message_class), id])
+        handlers.merge!(message_class.message_key => [message_class, get_method_by_class(message_class), id])
       end
      
       def started_by(message_class)
-        starters << message_class.name
+        starters << message_class.message_key
       end
 
       def search(message)
-        id_method_name = handlers[message.class.name][2]
+        id_method_name = handlers[message.class.message_key][2]
         send("find_by_#{id_method_name}", message.send(id_method_name))
       end
 
       def is_starter?(message)
-        starters.include? message.class.name
+        starters.include? message.class.message_key
       end
 
       def get_handler(message)
@@ -104,7 +104,7 @@ module Lolitra
     end
 
     def handle(message)
-      handler_method = self.class.handlers[message.class.name][1]
+      handler_method = self.class.handlers[message.class.message_key][1]
       raise "Can't handle message #{message.class}" unless handler_method
       self.send(handler_method, message)
     end
@@ -147,9 +147,9 @@ module Lolitra
     end
   end
 
-  module AmqpMessage
+  module Message
 
-    module AmqpMessageClass
+    module MessageClass
       def self.extended(base)
         class << base; attr_accessor :class_message_key; end
       end
@@ -158,7 +158,7 @@ module Lolitra
         if (key)
           self.class_message_key = key      
         else
-          self.class_message_key
+          self.class_message_key || "#{MessageHandler::Helper.underscore(self.class.name)}"
         end
       end
 
@@ -170,7 +170,7 @@ module Lolitra
     end
 
     def self.included(base)
-      base.send :extend, AmqpMessageClass
+      base.send :extend, MessageClass
     end
 
     def initialize(hash={})   
@@ -182,32 +182,6 @@ module Lolitra
       self.instance_variables.each {|var| hash[var.to_s.delete("@")] = self.instance_variable_get(var) }
       JSON.generate(hash)
     end
-  end
-
-  module AmqpMessageHandler
-    module AmqpMessageHandlerClass
-      
-      def self.extended(base)
-        class << base
-          attr_accessor :message_class_by_key
-          alias_method :message_handler_without_class_by_key, :message_handler unless method_defined?(:message_handler_without_class_by_key)
-          alias_method :message_handler, :message_handler_with_class_by_key
-        end
-        base.message_class_by_key = {}
-      end
-
-      def message_handler_with_class_by_key(message_class, id = :id)
-        message_class_by_key.merge!({message_class.message_key => message_class})
-        message_handler_without_class_by_key(message_class, id)
-      end
-
-    end
-
-    def self.included(base)
-      base.send :include, MessageHandler
-      base.send :extend, AmqpMessageHandlerClass
-    end
-
   end
 
   class AmqpBus
@@ -231,7 +205,7 @@ module Lolitra
       EM.next_tick do
         channel = AMQP::Channel.new(self.connection)
         channel.prefetch(1).queue(queue_prefix + MessageHandler::Helpers.underscore(handler_class.name), :dureable => true).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
-          message_class_tmp = handler_class.message_class_by_key[info.routing_key]
+          message_class_tmp = handler_class.handlers[info.routing_key][0]
           handler_class.handle(message_class_tmp.unmarshall(payload))
         end
       end
