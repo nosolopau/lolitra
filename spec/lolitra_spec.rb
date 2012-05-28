@@ -65,11 +65,15 @@ class TestMessageHandlerAmqp
 
   stateful false
 
-  def test_message(message)
-    EM.stop { exit } 
-  end
 end
 
+class TestMessageHandlerAmqp1
+  include Lolitra::MessageHandler
+
+  message_handler TestMessage
+
+  stateful false
+end
 
 describe Lolitra::MessageHandler,'#create_handler' do
   it "returns old instance of the handler for the same message id" do
@@ -113,7 +117,7 @@ describe Lolitra::MessageHandler, '#publish' do
     message = TestMessage.new
     bus = TestBus.new
     Lolitra::MessageHandlerManager.bus = bus
-    Lolitra::MessageHandlerManager.register(TestMessageHandler)
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandler)
 
 
     TestMessageHandler.should_receive(:handle).with(message)
@@ -125,7 +129,7 @@ describe Lolitra::MessageHandlerManager, '#publish' do
   it "can send message to the bus" do
     bus = TestBus.new
     Lolitra::MessageHandlerManager.bus = bus
-    Lolitra::MessageHandlerManager.register(TestMessageHandler)
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandler)
 
     message = TestMessage.new
 
@@ -142,8 +146,8 @@ describe Lolitra::MessageHandlerManager, '#handle_message' do
     
     Lolitra::MessageHandlerManager.bus = bus
 
-    Lolitra::MessageHandlerManager.register(TestMessageHandler)
-    Lolitra::MessageHandlerManager.register(TestMessageHandler1)
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandler)
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandler1)
 
     message = TestMessage.new
     message1 = TestMessage1.new
@@ -177,14 +181,17 @@ end
 describe Lolitra::AmqpBus do
   it "should recive message when publish a message" do
     Lolitra::MessageHandlerManager.bus = Lolitra::AmqpBus.new(:host => "127.0.0.1", :exchange => "test_exchange")
-    Lolitra::MessageHandlerManager.register(TestMessageHandlerAmqp)
+    Lolitra::MessageHandlerManager.register_pull_subscriber(TestMessageHandlerAmqp)
+    Lolitra::MessageHandlerManager.register_pull_subscriber(TestMessageHandlerAmqp1)
 
     TestMessageHandlerAmqp.should_receive(:handle) do |message|
       message.should be_an_instance_of TestMessage
       EM.stop { exit }
     end
 
-    Lolitra::MessageHandlerManager.publish(TestMessage.new)
+    EM.add_timer(0.25) do
+      Lolitra::MessageHandlerManager.publish(TestMessage.new)
+    end
 
     EM.next_tick{ EM.add_timer(60) { EM.stop { exit } }}
     AMQP::Utilities::EventLoopHelper.eventmachine_thread.join
@@ -194,5 +201,47 @@ end
 describe Lolitra::AmqpBus do
   it "should return a unable to connect when specify a wrong amqp host" do
     expect { Lolitra::AmqpBus.new(:host => "192.168.123.123") }.to raise_error(Exception) #TODO
+  end
+end
+
+describe Lolitra::AmqpBus do
+  it "should send all messages to all subscribers in non pull mode" do
+    Lolitra::MessageHandlerManager.bus = Lolitra::AmqpBus.new(:host => "127.0.0.1", :exchange => "test_exchange")
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandlerAmqp)
+    Lolitra::MessageHandlerManager.register_subscriber(TestMessageHandlerAmqp1)
+
+    @handled_message_1 = false
+    @handled_message_2 = false
+
+    TestMessageHandlerAmqp.should_receive(:handle) do |message|
+      message.should be_an_instance_of TestMessage
+      @handled_message_1 = true
+      EM.stop { exit } if @handled_message_1 && @handled_message_2
+    end
+
+    TestMessageHandlerAmqp1.should_receive(:handle) do |message|
+      message.should be_an_instance_of TestMessage
+      @handled_message_2 = true
+      EM.stop { exit } if @handled_message_1 && @handled_message_2
+    end
+
+    EM.add_timer(0.25){
+      Lolitra::MessageHandlerManager.publish(TestMessage.new)
+    }
+
+    EM.next_tick{ EM.add_timer(60) { EM.stop { exit } }}
+    AMQP::Utilities::EventLoopHelper.eventmachine_thread.join
+  end
+end  
+
+describe Lolitra::Future,"#wait_message" do
+  it "should return the message" do
+    Lolitra::MessageHandlerManager.bus = Lolitra::AmqpBus.new(:host => "127.0.0.1", :exchange => "test_exchange")
+    EM.next_tick{    
+      Lolitra::MessageHandlerManager.publish(TestMessage.new)
+    }
+    future = Lolitra::Future.new     
+    message = future.wait_for(TestMessage)
+    message.should be_an_instance_of TestMessage    
   end
 end

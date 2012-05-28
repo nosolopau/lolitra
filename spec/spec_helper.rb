@@ -21,6 +21,10 @@ class TestBus
     end
   end
 
+  def pull_subscribe(message_class, handler_class)
+    subscribe(message_class, handler_class)
+  end
+  
   def subscribe(message_class, handler_class)
     @unmarshallers[message_class.message_key] = message_class
     @handlers[message_class.name] ||= []

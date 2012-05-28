@@ -125,12 +125,24 @@ module Lolitra
       instance.bus
     end
 
-    def self.register(handler_class)
-      instance.register(handler_class)
+    def self.register_subscriber(handler_class)
+      instance.register_subscriber(handler_class)
     end
    
-    def register(handler_class)
-      register_message_handler(handler_class)    
+    def register_subscriber(handler_class)
+      handler_class.handle_messages.each do |message_class|
+        bus.subscribe(message_class, handler_class)
+      end
+    end
+
+    def self.register_pull_subscriber(handler_class)
+      instance.register_pull_subscriber(handler_class)
+    end
+   
+    def register_pull_subscriber(handler_class)
+      handler_class.handle_messages.each do |message_class|
+        bus.pull_subscribe(message_class, handler_class)
+      end
     end
 
     def self.publish(message_instance)
@@ -139,12 +151,6 @@ module Lolitra
 
     def publish(message_instance)
       bus.publish(message_instance)
-    end
-  private
-    def register_message_handler(handler_class)
-      handler_class.handle_messages.each do |message_class|
-        bus.subscribe(message_class, handler_class)
-      end
     end
   end
 
@@ -203,18 +209,26 @@ module Lolitra
     end
 
     def subscribe(message_class, handler_class)
-      EM.next_tick do
-        channel = AMQP::Channel.new(self.connection)
-        channel.prefetch(1).queue(queue_prefix + MessageHandler::Helpers.underscore(handler_class.name), :dureable => true).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
-          message_class_tmp = handler_class.handlers[info.routing_key][0]
-          handler_class.handle(message_class_tmp.unmarshall(payload))
-        end
-      end
+      create_queue(message_class, handler_class, {:exclusive => true, :durable => false}, "")
+    end
+
+    def pull_subscribe(message_class, handler_class)
+      create_queue(message_class, handler_class, {:durable => true}, queue_prefix + MessageHandler::Helpers.underscore(handler_class.name))
     end
 
     def publish(message)
       self.exchange.publish(message.marshall, :routing_key => message.class.message_key, :timestamp => Time.now.to_i)
     end
 
+  private
+    def create_queue(message_class, handler_class, options, queue_name)
+      EM.next_tick do
+        channel = AMQP::Channel.new(self.connection)
+        channel.prefetch(1).queue(queue_name, options).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
+          message_class_tmp = handler_class.handlers[info.routing_key][0]
+          handler_class.handle(message_class_tmp.unmarshall(payload))
+        end
+      end
+    end
   end
 end  
