@@ -1,12 +1,27 @@
 require 'singleton'
+require 'log4r'
 require 'amqp'
 require 'amqp/utilities/event_loop_helper'
 require 'json'
 
 module Lolitra
+  include Log4r
+
+  @@logger = Logger.new 'lolitra'
+  @@logger.outputters = Outputter.stdout
+
+  def self.logger
+    @@logger
+  end
+
+  def self.logger=(new_logger)
+    @@logger = new_logger
+  end
+
   module MessageHandler
     module Helpers
-      def self.underscore(word)
+      def self.underscore(arg)
+        word = arg.dup
         word.gsub!(/::/, '/')
         word.gsub!(/([A-Z]+)([A-Z][a-z])/,'\1_\2')
         word.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
@@ -104,6 +119,10 @@ module Lolitra
       base.send :extend, MessageHandlerClass
     end
 
+    def publish(message)
+      self.class.publish(message)
+    end
+
     def handle(message)
       handler_method = self.class.handlers[message.class.message_key][1]
       raise "Can't handle message #{message.class}" unless handler_method
@@ -165,7 +184,7 @@ module Lolitra
         if (key)
           self.class_message_key = key      
         else
-          self.class_message_key || "#{MessageHandler::Helper.underscore(self.class.name)}"
+          self.class_message_key || "#{MessageHandler::Helpers.underscore(self.class.name)}"
         end
       end
 
@@ -181,13 +200,17 @@ module Lolitra
     end
 
     def initialize(hash={})   
-      hash.each { |key, value| self.send("#{MessageHandler::Helper.underscore(key)}=", value) }
+      hash.each { |key, value| self.send("#{MessageHandler::Helpers.underscore(key)}=", value) }
+    end
+
+    def to_hash
+      hash = {}
+      self.instance_variables.each {|var| hash[var.to_s.delete("@").to_sym] = self.instance_variable_get(var) }
+      hash
     end
 
     def marshall
-      hash = {}
-      self.instance_variables.each {|var| hash[var.to_s.delete("@")] = self.instance_variable_get(var) }
-      JSON.generate(hash)
+      JSON.generate(to_hash)
     end
   end
 
@@ -217,6 +240,8 @@ module Lolitra
     end
 
     def publish(message)
+      Lolitra::logger.debug("Message sent: #{message.class.message_key}")
+      Lolitra::logger.debug("#{message.marshall}")
       self.exchange.publish(message.marshall, :routing_key => message.class.message_key, :timestamp => Time.now.to_i)
     end
 
@@ -225,6 +250,8 @@ module Lolitra
       EM.next_tick do
         channel = AMQP::Channel.new(self.connection)
         channel.prefetch(1).queue(queue_name, options).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
+          Lolitra::logger.debug("Message recived: #{info.routing_key}")
+          Lolitra::logger.debug("#{payload}")
           message_class_tmp = handler_class.handlers[info.routing_key][0]
           handler_class.handle(message_class_tmp.unmarshall(payload))
         end

@@ -18,4 +18,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency("rspec")
   gem.add_dependency("amqp")
   gem.add_dependency("json")
+  gem.add_dependency("log4r")
 end
