@@ -1,5 +1,2 @@
 require "lolitra/version"
-
-module Lolitra
-  # Your code goes here...
-end
+require "lolitra/handler_base"
