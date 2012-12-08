@@ -19,4 +19,5 @@ Gem::Specification.new do |gem|
   gem.add_dependency("amqp")
   gem.add_dependency("json")
   gem.add_dependency("log4r")
+  gem.add_dependency("faye")
 end

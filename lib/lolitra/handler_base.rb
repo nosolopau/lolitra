@@ -214,6 +214,26 @@ module Lolitra
     end
   end
 
+  class FayeBus
+    def initialize(options = {})
+      EM::next_tick do
+        @socketClient = Faye::Client.new(options[:url] || 'http://localhost:9292/faye')
+      end
+    end
+    
+    def subscribe(message_class, handler_class)
+      EM::next_tick do
+        @socketClient.subscribe(message_class.message_key) do |payload|
+          handler_class.handle(message_class.unmarshall(payload))
+        end
+      end
+    end
+
+    def publish(message)
+      @socketClient.publish(message.class.message_key, message.marshall)
+    end 
+  end
+
   class AmqpBus
     attr_accessor :queue_prefix
     attr_accessor :connection
