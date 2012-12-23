@@ -165,14 +165,14 @@ module Lolitra
       end
     end
 
-    def self.publish(message_instance)
-      Lolitra::logger.debug("Message sent: #{message.class.message_key}")
-      Lolitra::logger.debug("#{message.marshall}")
-      instance.publish(message_instance)
+    def self.publish(message)
+      instance.publish(message)
     end
 
-    def publish(message_instance)
-      bus.publish(message_instance)
+    def publish(message)
+      Lolitra::logger.debug("Message sent: #{message.class.message_key}")
+      Lolitra::logger.debug("#{message.marshall}")
+      bus.publish(message)
     end
   end
 
