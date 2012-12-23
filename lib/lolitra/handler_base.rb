@@ -56,7 +56,8 @@ module Lolitra
       end
 
       def handle(message)
-        #puts "#{self.name} try to handle new message #{message.class.name}"
+        Lolitra::logger.debug("Message recived: #{message.class.message_key}")
+        Lolitra::logger.debug("#{message}")
         begin      
           get_handler(message).handle(message)
         rescue NoMethodError => e
@@ -165,6 +166,8 @@ module Lolitra
     end
 
     def self.publish(message_instance)
+      Lolitra::logger.debug("Message sent: #{message.class.message_key}")
+      Lolitra::logger.debug("#{message.marshall}")
       instance.publish(message_instance)
     end
 
@@ -255,8 +258,6 @@ module Lolitra
     end
 
     def publish(message)
-      Lolitra::logger.debug("Message sent: #{message.class.message_key}")
-      Lolitra::logger.debug("#{message.marshall}")
       self.exchange.publish(message.marshall, :routing_key => message.class.message_key, :timestamp => Time.now.to_i)
     end
 
@@ -265,8 +266,6 @@ module Lolitra
       EM.next_tick do
         channel = AMQP::Channel.new(self.connection)
         channel.prefetch(1).queue(queue_name, options).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
-          Lolitra::logger.debug("Message recived: #{info.routing_key}")
-          Lolitra::logger.debug("#{payload}")
           message_class_tmp = handler_class.handlers[info.routing_key][0]
           handler_class.handle(message_class_tmp.unmarshall(payload))
         end
