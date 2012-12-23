@@ -199,18 +199,13 @@ module Lolitra
       base.send :extend, MessageClass
     end
 
-    def initialize(hash={})   
-      hash.each { |key, value| self.send("#{MessageHandler::Helpers.underscore(key)}=", value) }
-    end
-
-    def to_hash
-      hash = {}
-      self.instance_variables.each {|var| hash[var.to_s.delete("@").to_sym] = self.instance_variable_get(var) }
-      hash
+    def initialize(hash={})
+      super()
+      self.replace(hash) 
     end
 
     def marshall
-      JSON.generate(to_hash)
+      JSON.generate(self)
     end
   end
 
