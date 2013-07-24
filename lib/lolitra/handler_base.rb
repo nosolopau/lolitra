@@ -3,6 +3,7 @@ require 'log4r'
 require 'amqp'
 require 'amqp/utilities/event_loop_helper'
 require 'json'
+require 'fiber'
 
 module Lolitra
   include Log4r
@@ -265,9 +266,32 @@ module Lolitra
     def create_queue(message_class, handler_class, options, queue_name)
       EM.next_tick do
         channel = AMQP::Channel.new(self.connection)
-        channel.prefetch(1).queue(queue_name, options).bind(self.exchange, :routing_key => message_class.message_key).subscribe do |info, payload|
-          message_class_tmp = handler_class.handlers[info.routing_key][0]
-          handler_class.handle(message_class_tmp.unmarshall(payload))
+        channel.prefetch(1).queue(queue_name, options).bind(self.exchange, :routing_key => message_class.message_key).subscribe(:ack => true) do |info, payload|
+          Fiber.new do
+            current_fiber = Fiber.current
+            for i in (0..5)
+              begin
+                Lolitra::logger.debug("Message recived: #{info.routing_key}")
+                Lolitra::logger.debug("#{payload}")
+                message_class_tmp = handler_class.handlers[info.routing_key][0]
+                handler_class.handle(message_class_tmp.unmarshall(payload))
+                info.ack
+                Lolitra::logger.debug("Message processed")
+                break
+              rescue => e
+                Lolitra::logger.error("Try #{i}: #{e.message}")
+                if (i!=5)
+                  EventMachine.add_timer(5) do
+                    current_fiber.resume
+                  end
+                  Fiber.yield 
+                else
+                  Lolitra::logger.error(e.backtrace.join("\n\t"))
+                  info.reject(:requeue => false)
+                end
+              end
+            end
+          end.resume
         end
       end
     end
